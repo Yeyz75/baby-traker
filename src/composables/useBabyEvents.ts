@@ -1,34 +1,42 @@
-import { ref, onMounted, computed, watch } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import {
   collection,
   addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
   query,
   where,
   orderBy,
   onSnapshot,
   Timestamp,
-  doc,
-  updateDoc,
-  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "./useAuth";
-import type { BabyEvent, BabyEventFirestore } from "../types/BabyEvent";
+import type { BabyEvent } from "../types/BabyEvent";
+
+interface BabyEventFirestore {
+  type: BabyEvent["type"];
+  timestamp: Timestamp;
+  note: string;
+  userId: string;
+}
 
 export function useBabyEvents() {
   const { user } = useAuth();
   const events = ref<BabyEvent[]>([]);
-  const loading = ref(true);
+  const loading = ref(false);
   const error = ref("");
+  let unsubscribe: (() => void) | null = null;
 
-  // Get or create anonymous user ID
   const getUserId = (): string => {
-    if (user.value) {
-      return user.value.uid;
-    }
     let userId = localStorage.getItem("babytrack-user-id");
     if (!userId) {
-      userId = "user-" + Math.random().toString(36).substr(2, 9);
+      userId =
+        "anonymous-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).substr(2, 9);
       localStorage.setItem("babytrack-user-id", userId);
     }
     return userId;
@@ -177,6 +185,12 @@ export function useBabyEvents() {
     loading.value = true;
     error.value = "";
 
+    // Cancelar listener anterior si existe
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+
     const q = query(
       collection(db, collectionPath),
       where("userId", "==", userId),
@@ -185,7 +199,7 @@ export function useBabyEvents() {
       orderBy("timestamp", "desc")
     );
 
-    const unsubscribe = onSnapshot(
+    unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         events.value = snapshot.docs.map((doc) => {
@@ -208,24 +222,36 @@ export function useBabyEvents() {
           "Error al cargar las actividades. Verifica tu conexión a internet.";
         // Set empty array on error to prevent infinite loading
         events.value = [];
+        // En caso de error de permisos, limpiar los eventos
+        if (firestoreError.code === "permission-denied") {
+          events.value = [];
+        }
       }
     );
-
-    // Return unsubscribe function for cleanup
-    return unsubscribe;
   };
 
-  // Watch for user changes to reload events
-  watch(
-    user,
-    (newUser) => {
-      if (newUser) {
-        migrateLocalEvents();
-      }
-      loadTodayEvents();
-    },
-    { immediate: false }
-  );
+  // Cleanup function to unsubscribe from listeners
+  const cleanup = () => {
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+  };
+
+  // Watch for user changes to handle authentication state
+  watch(user, (newUser, oldUser) => {
+    // Si el usuario cerró sesión, limpiar listeners y datos
+    if (oldUser && !newUser) {
+      cleanup();
+      events.value = [];
+    }
+    // Si el usuario inició sesión, migrar datos y cargar eventos
+    else if (newUser && !oldUser) {
+      migrateLocalEvents();
+    }
+    // Recargar eventos cuando cambia el usuario
+    loadTodayEvents();
+  });
 
   onMounted(() => {
     loadTodayEvents();
@@ -241,5 +267,6 @@ export function useBabyEvents() {
     updateEvent,
     deleteEvent,
     migrateLocalEvents,
+    cleanup,
   };
 }

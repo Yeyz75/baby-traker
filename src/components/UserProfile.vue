@@ -151,8 +151,8 @@ import { useBabyEvents } from "../composables/useBabyEvents";
 import AuthModal from "./AuthModal.vue";
 
 const { user, logout } = useAuth();
-const { migrateLocalHabits } = useCustomHabits();
-const { migrateLocalEvents } = useBabyEvents();
+const { migrateLocalHabits, cleanup: cleanupHabits } = useCustomHabits();
+const { migrateLocalEvents, cleanup: cleanupEvents } = useBabyEvents();
 
 const showAuthModal = ref(false);
 const isMenuOpen = ref(false);
@@ -167,8 +167,17 @@ const closeMenu = () => {
 
 const handleLogout = async () => {
   if (confirm("¿Estás seguro de que quieres cerrar sesión?")) {
-    await logout();
-    closeMenu();
+    try {
+      // Limpiar listeners antes de cerrar sesión
+      cleanupHabits();
+      cleanupEvents();
+
+      // Cerrar sesión
+      await logout();
+      closeMenu();
+    } catch (error) {
+      console.error("Error durante el cierre de sesión:", error);
+    }
   }
 };
 
@@ -205,5 +214,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener("click", handleClickOutside);
+  // Limpiar listeners al desmontar el componente
+  cleanupHabits();
+  cleanupEvents();
 });
 </script>

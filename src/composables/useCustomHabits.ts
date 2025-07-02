@@ -1,4 +1,4 @@
-import { ref, computed } from "vue";
+import { ref, computed, watch, onMounted } from "vue";
 import {
   collection,
   addDoc,
@@ -17,6 +17,7 @@ export function useCustomHabits() {
   const { user } = useAuth();
   const habits = ref<CustomHabit[]>([]);
   const loading = ref(false);
+  let unsubscribe: (() => void) | null = null;
 
   // Get or create anonymous user ID
   const getUserId = (): string => {
@@ -25,7 +26,11 @@ export function useCustomHabits() {
     }
     let userId = localStorage.getItem("babytrack-user-id");
     if (!userId) {
-      userId = "user-" + Math.random().toString(36).substr(2, 9);
+      userId =
+        "anonymous-" +
+        Date.now() +
+        "-" +
+        Math.random().toString(36).substr(2, 9);
       localStorage.setItem("babytrack-user-id", userId);
     }
     return userId;
@@ -62,12 +67,19 @@ export function useCustomHabits() {
     if (!user.value) return;
 
     loading.value = true;
+
+    // Cancelar listener anterior si existe
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
+
     const q = query(
       collection(db, "customHabits"),
       where("userId", "==", user.value.uid)
     );
 
-    const unsubscribe = onSnapshot(
+    unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         habits.value = snapshot.docs.map((doc) => {
@@ -84,11 +96,20 @@ export function useCustomHabits() {
       (error) => {
         console.error("Error loading Firestore habits:", error);
         loading.value = false;
+        // En caso de error de permisos, limpiar los hábitos
+        if (error.code === "permission-denied") {
+          habits.value = [];
+        }
       }
     );
+  };
 
-    // Return unsubscribe function for cleanup
-    return unsubscribe;
+  // Cleanup function to unsubscribe from listeners
+  const cleanup = () => {
+    if (unsubscribe) {
+      unsubscribe();
+      unsubscribe = null;
+    }
   };
 
   // Add new custom habit
@@ -228,6 +249,24 @@ export function useCustomHabits() {
     }
   };
 
+  // Watch for user changes to handle authentication state
+  watch(user, (newUser, oldUser) => {
+    // Si el usuario cerró sesión, limpiar listeners y datos
+    if (oldUser && !newUser) {
+      cleanup();
+      habits.value = [];
+    }
+    // Si el usuario inició sesión, cargar datos de Firestore
+    else if (newUser && !oldUser) {
+      loadFirestoreHabits();
+    }
+  });
+
+  // Cleanup on unmount
+  onMounted(() => {
+    initializeHabits();
+  });
+
   return {
     habits,
     loading,
@@ -237,5 +276,6 @@ export function useCustomHabits() {
     deleteCustomHabit,
     migrateLocalHabits,
     initializeHabits,
+    cleanup,
   };
 }
