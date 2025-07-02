@@ -1,20 +1,46 @@
 <template>
   <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-    <h2 class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center">
+    <h2
+      class="text-xl font-bold text-gray-800 dark:text-white mb-4 flex items-center"
+    >
       <span class="mr-2">📋</span>
-      {{ babyName ? `Actividades de hoy de ${babyName}` : 'Actividades de hoy' }}
+      {{
+        babyName ? `Actividades de hoy de ${babyName}` : "Actividades de hoy"
+      }}
     </h2>
-    
-    <div v-if="loading" class="text-center py-8 text-gray-500 dark:text-gray-400">
-      <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-      Cargando...
+
+    <div
+      v-if="loading"
+      class="text-center py-8 text-gray-500 dark:text-gray-400"
+    >
+      <div
+        class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"
+      ></div>
+      Cargando actividades...
     </div>
-    
-    <div v-else-if="events.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+
+    <div
+      v-else-if="error"
+      class="text-center py-8 text-red-500 dark:text-red-400"
+    >
+      <div class="text-3xl mb-2">⚠️</div>
+      <p class="mb-2">{{ error }}</p>
+      <button
+        @click="$emit('retry')"
+        class="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+      >
+        Reintentar
+      </button>
+    </div>
+
+    <div
+      v-else-if="events.length === 0"
+      class="text-center py-8 text-gray-500 dark:text-gray-400"
+    >
       <div class="text-3xl mb-2">👶</div>
       <p>Aún no hay actividades registradas hoy</p>
     </div>
-    
+
     <div v-else class="space-y-3">
       <div
         v-for="(event, index) in events"
@@ -24,14 +50,26 @@
         <div class="text-2xl mr-3">{{ getEventIcon(event.type) }}</div>
         <div class="flex-1">
           <div class="flex items-center justify-between">
-            <span class="font-medium text-gray-800 dark:text-white">{{ getEventLabel(event.type) }}</span>
-            <span class="text-sm text-gray-500 dark:text-gray-400">{{ formatTime(event.timestamp) }}</span>
+            <span class="font-medium text-gray-800 dark:text-white">{{
+              getEventLabel(event.type)
+            }}</span>
+            <span class="text-sm text-gray-500 dark:text-gray-400">{{
+              formatTime(event.timestamp)
+            }}</span>
           </div>
-          <p v-if="event.note" class="text-sm text-gray-600 dark:text-gray-300 mt-1">{{ event.note }}</p>
+          <p
+            v-if="event.note"
+            class="text-sm text-gray-600 dark:text-gray-300 mt-1"
+          >
+            {{ event.note }}
+          </p>
         </div>
-        
+
         <!-- Edit/Delete buttons for recent events (last 5) -->
-        <div v-if="index < 5" class="flex gap-2 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div
+          v-if="index < 5"
+          class="flex gap-2 ml-2 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
           <button
             @click="handleEdit(event)"
             class="p-2 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900 rounded-lg transition-colors"
@@ -53,69 +91,73 @@
 </template>
 
 <script setup lang="ts">
-import type { BabyEvent } from '../types/BabyEvent';
-import type { CustomHabit } from '../types/BabyEvent';
+import type { BabyEvent } from "../types/BabyEvent";
+import type { CustomHabit } from "../types/BabyEvent";
 
 interface Props {
   events: BabyEvent[];
   loading: boolean;
   babyName: string;
   customHabits: CustomHabit[];
+  error?: string;
 }
 
-const props = defineProps<Props>();
+const props = withDefaults(defineProps<Props>(), {
+  error: "",
+});
 
 const emit = defineEmits<{
   edit: [event: BabyEvent];
   delete: [event: BabyEvent];
+  retry: [];
 }>();
 
-const getEventIcon = (type: BabyEvent['type']) => {
+const getEventIcon = (type: BabyEvent["type"]) => {
   const icons: Record<string, string> = {
-    feed: '🍼',
-    diaper: '💩',
-    sleep: '🛌'
+    feed: "🍼",
+    diaper: "💩",
+    sleep: "🛌",
   };
-  
+
   // Check if it's a custom habit
-  const customHabit = props.customHabits.find(h => h.id === type);
+  const customHabit = props.customHabits.find((h) => h.id === type);
   if (customHabit) {
     return customHabit.emoji;
   }
-  
-  return icons[type] || '❓';
+
+  return icons[type] || "❓";
 };
 
-const getEventLabel = (type: BabyEvent['type']) => {
+const getEventLabel = (type: BabyEvent["type"]) => {
   const labels: Record<string, string> = {
-    feed: 'Tomó leche',
-    diaper: 'Cambió pañal',
-    sleep: 'Durmió'
+    feed: "Tomó leche",
+    diaper: "Cambió pañal",
+    sleep: "Durmió",
   };
-  
+
   // Check if it's a custom habit
-  const customHabit = props.customHabits.find(h => h.id === type);
+  const customHabit = props.customHabits.find((h) => h.id === type);
   if (customHabit) {
     return customHabit.name;
   }
-  
+
   return labels[type] || type;
 };
 
 const formatTime = (date: Date) => {
-  return date.toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit'
+  return date.toLocaleTimeString("es-ES", {
+    hour: "2-digit",
+    minute: "2-digit",
   });
 };
 
 const handleEdit = (event: BabyEvent) => {
-  emit('edit', event);
+  emit("edit", event);
 };
 
 const handleDelete = (event: BabyEvent) => {
-  if (confirm('¿Estás seguro de que quieres eliminar este evento?')) {
-    emit('delete', event);
+  if (confirm("¿Estás seguro de que quieres eliminar este evento?")) {
+    emit("delete", event);
   }
 };
 </script>

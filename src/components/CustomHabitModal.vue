@@ -130,8 +130,8 @@ const handleSave = async () => {
     loading.value = true;
     error.value = '';
     emit('save', habitName.value.trim(), selectedEmoji.value);
-  } catch (err) {
-    error.value = 'Error al guardar el hábito';
+  } catch (err: any) {
+    error.value = err.message || 'Error al guardar el hábito. Inténtalo de nuevo.';
   } finally {
     loading.value = false;
   }
